@@ -2,7 +2,7 @@
 seeds = false
 skip-lint = false
 [programs.devnet]
-crouton_jones_nft_solana = "3Bj1KmAeobZ2rBg1GiitVXxoV6Z3zQZtCtYHTgCbUrcj"
+crouton_jones_nft_solana = "CeyTr5Ums5UzGynXdhVm5iZsqipouk2GJa8urRKCzwgC"
 
 [registry]
 url = "https://api.apr.dev"

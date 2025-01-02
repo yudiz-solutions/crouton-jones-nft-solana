@@ -9,6 +9,7 @@ import {
   getAssociatedTokenAddressSync,
   mintTo,
   TOKEN_PROGRAM_ID,
+  
   transfer,
 } from "@solana/spl-token";
 
@@ -27,81 +28,181 @@ describe("crouton-jones-nft-solana", () => {
   const payer = provider.wallet.publicKey;
 
   console.log(`<---------------Wallet: ${payer}---------------------->`);
-  const metadata = {
-    name: "Crouton Jones Token",
-    symbol: "CJT",
-    uri: "https://brown-orthodox-lion-702.mypinata.cloud/ipfs/QmT6bfwy2aXQzZr9uNEVYTQFDVJJuoaDE1w5Q27eryFjiy",
-    decimals: 9,
-    tokenId: new anchor.BN(1)
-  };
 
   const mint = anchor.web3.Keypair.generate(); // token account
   console.log("🚀 ~ describe ~ mint:", mint.publicKey);
   console.log("🚀 ~ describe ~ mint:", mint.publicKey.toBase58());
- 
+
   const [metadataAddress] = anchor.web3.PublicKey.findProgramAddressSync(
     [
-      Buffer.from(METADATA_SEED),
+      Buffer.from("metadata"),
       TOKEN_METADATA_PROGRAM_ID.toBuffer(),
       mint.publicKey.toBuffer(),
     ],
     TOKEN_METADATA_PROGRAM_ID
   );
 
-  const [tokenHolder] = anchor.web3.PublicKey.findProgramAddressSync(
+  const [masterEditionAddress] = anchor.web3.PublicKey.findProgramAddressSync(
     [
-      Buffer.from('token_holder'),
+      Buffer.from("metadata"),
+      TOKEN_METADATA_PROGRAM_ID.toBuffer(),
+      mint.publicKey.toBuffer(),
+      Buffer.from("edition"),
     ],
-    program.programId
+    TOKEN_METADATA_PROGRAM_ID
   );
 
-  it("Mint token", async () => {
 
-    const info = await program.provider.connection.getAccountInfo(mint.publicKey);
-
-    console.log(info)
-    if (info) {
-      return; // Do not attempt to initialize if already initialized
-    }
-    console.log("<--------------- Attempting to initialize.---------------------->");
- 
-    const destination = getAssociatedTokenAddressSync(
-      mint.publicKey,
-      tokenHolder,
-      true,
-      TOKEN_PROGRAM_ID,
-      ASSOCIATED_TOKEN_PROGRAM_ID
-    );
-    console.log("🚀 ~ it ~ destination/ATA:", destination);
-
-    const context = {
-      metadata: metadataAddress,
-      mint: mint.publicKey,
-      tokenHolder: tokenHolder, // PDA
-      destination:destination, // ATA 
-      payer,
-      rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-      systemProgram: anchor.web3.SystemProgram.programId,
-      tokenProgram: anchor.utils.token.TOKEN_PROGRAM_ID,
-      tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
+  it("Can mint a single NFT", async () => {
+    const metadata = {
+      title: "Crouton Jones Token",
+      symbol: "CJT",
+      uri: "https://brown-orthodox-lion-702.mypinata.cloud/ipfs/QmT6bfwy2aXQzZr9uNEVYTQFDVJJuoaDE1w5Q27eryFjiy",
     };
+      // Derive the token account address
+      const tokenAccount = await getAssociatedTokenAddress(
+        mint.publicKey,
+        provider.wallet.publicKey
+      );
 
-    const tx = await program.methods
-      .initToken(metadata.name, metadata.symbol, metadata.uri, new anchor.BN('1')) //4,000,000,000 with 9 decimals
-      .accounts(context).signers([provider.wallet.payer, mint])
-      .rpc();
+    try {
+      const tx = await program.methods
+        .mint(
+          new anchor.BN(10),
+          metadata.title,
+          metadata.symbol,
+          metadata.uri
+        )
+        .accounts({
+          mint: mint.publicKey,
+          tokenAccount: tokenAccount,
+          mintAuthority: provider.wallet.publicKey,
+          metadata: metadataAddress,
+          masterEdition: masterEditionAddress,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: anchor.web3.SystemProgram.programId,
+          tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+        })
+        .signers([ mint, provider.wallet.payer])
+        .rpc();
 
-      console.log("<--------------- Token Mint successfully.---------------------->");
-       
-      let initialBalance: number;
-      try {
-        const balance = (await provider.connection.getTokenAccountBalance(destination))
-        initialBalance = balance.value.uiAmount;
-        console.log("🚀 ~ it ~ Balance:", balance)
+        console.log("🚀 ~ describe ~ tx:", tx);
+      // Verify the token account exists and has the correct balance
+      const tokenAccountInfo = await provider.connection.getTokenAccountBalance(tokenAccount);
+      console.log("🚀 ~ describe ~ tokenAccountInfo:", tokenAccountInfo);
+      // Verify metadata account exists
+      const metadataAccountInfo = await provider.connection.getAccountInfo(metadataAddress);
+      console.log("🚀 ~ describe ~ metadataAccountInfo:", metadataAccountInfo);
+      // Verify master edition account exists
+      const masterEditionAccountInfo = await provider.connection.getAccountInfo(masterEditionAddress);
+      console.log("🚀 ~ describe ~ masterEditionAccountInfo:", masterEditionAccountInfo);
+    } catch (error) {
+      console.error("Error:", error);
+      throw error;
+    }
+  });
 
-      } catch {
-        // Token account not yet initiated has 0 balance
-        initialBalance = 0;
-      } 
-  }); 
+  it.only("Can mint an edition", async () => {
+    // First mint the master edition if not already minted
+    const masterTokenAccount = await getAssociatedTokenAddress(
+      mint.publicKey,
+      provider.wallet.publicKey
+    );
+
+    // Generate new keypair for edition mint
+    const editionMint = anchor.web3.Keypair.generate();
+    console.log("🚀 ~ describe ~ editionMint:", editionMint.publicKey.toBase58());
+
+    // Derive edition metadata address
+    const [editionMetadataAddress] = anchor.web3.PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("metadata"),
+        TOKEN_METADATA_PROGRAM_ID.toBuffer(),
+        editionMint.publicKey.toBuffer(),
+      ],
+      TOKEN_METADATA_PROGRAM_ID
+    );
+
+    // Derive edition address
+    const [editionAddress] = anchor.web3.PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("metadata"),
+        TOKEN_METADATA_PROGRAM_ID.toBuffer(),
+        editionMint.publicKey.toBuffer(),
+        Buffer.from("edition"),
+      ],
+      TOKEN_METADATA_PROGRAM_ID
+    );
+
+    // Get edition token account
+    const editionTokenAccount = await getAssociatedTokenAddress(
+      editionMint.publicKey,
+      provider.wallet.publicKey
+    );
+
+    // Derive the edition marker PDA (Required for tracking edition numbers)
+    const editionNumber = new anchor.BN(1);
+    const [editionMarkerPda] = anchor.web3.PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("metadata"),
+        TOKEN_METADATA_PROGRAM_ID.toBuffer(),
+        mint.publicKey.toBuffer(),
+        Buffer.from("edition"),
+        Buffer.from(Math.floor(editionNumber.toNumber() / 248).toString())
+      ],
+      TOKEN_METADATA_PROGRAM_ID
+    );
+
+    try {
+      const tx = await program.methods
+        .mintEdition(editionNumber)
+        .accounts({
+          editionMint: editionMint.publicKey,
+          editionTokenAccount: editionTokenAccount,
+          payer: provider.wallet.publicKey,
+          editionMetadata: editionMetadataAddress,
+          edition: editionAddress,
+          masterMint: mint.publicKey,
+          masterTokenAccount: masterTokenAccount,
+          masterMetadata: metadataAddress,
+          masterEdition: masterEditionAddress,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: anchor.web3.SystemProgram.programId,
+          tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+          sysvarInstructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+          editionMarkerPda: editionMarkerPda,
+        })
+        .signers([editionMint])
+        .rpc();
+
+      console.log("🚀 ~ Edition minted successfully ~ tx:", tx);
+
+      // Verify the edition token account exists and has the correct balance
+      const editionTokenAccountInfo = await provider.connection.getTokenAccountBalance(
+        editionTokenAccount
+      );
+      console.log("🚀 ~ Edition token account balance:", editionTokenAccountInfo);
+
+      // Verify edition metadata account exists
+      const editionMetadataAccountInfo = await provider.connection.getAccountInfo(
+        editionMetadataAddress
+      );
+      console.log("🚀 ~ Edition metadata account info:", editionMetadataAccountInfo);
+
+      // Verify edition account exists
+      const editionAccountInfo = await provider.connection.getAccountInfo(
+        editionAddress
+      );
+      console.log("🚀 ~ Edition account info:", editionAccountInfo);
+
+    } catch (error) {
+      console.error("Error minting edition:", error);
+      throw error;
+    }
+  });
+
 });
