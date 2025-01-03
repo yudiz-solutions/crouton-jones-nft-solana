@@ -15,11 +15,30 @@ use structures::*;
 use solana_program::program::invoke;
 
 declare_id!("CeyTr5Ums5UzGynXdhVm5iZsqipouk2GJa8urRKCzwgC");
+  
+pub fn find_edition_marker_pda(
+    master_edition_key: &Pubkey, // Changed to take reference
+    edition_number: u64,
+) -> (Pubkey, u8) { // Return both PDA and bump
+    let edition_number_str = edition_number.to_string();
+    
+    Pubkey::find_program_address(
+        &[
+            b"metadata",
+            mpl_token_metadata::ID.as_ref(),
+            master_edition_key.as_ref(),
+            b"edition",
+            edition_number_str.as_bytes(),
+        ],
+        &mpl_token_metadata::ID
+    )
+}
 
 #[program]
 pub mod crouton_jones_nft_solana {
 
     use super::*;
+  
     pub fn mint(
         ctx: Context<MintNft>,
         quantity: u64,
@@ -155,6 +174,7 @@ pub mod crouton_jones_nft_solana {
         Ok(())
     }    
  
+ 
    pub fn mint_edition(
     ctx: Context<MintEdition>,
     edition_number: u64,
@@ -215,6 +235,11 @@ pub mod crouton_jones_nft_solana {
         1,
     )?;
 msg!("Creating metadata account");
+
+let (edition_marker_pda, _bump) = crouton_jones_nft_solana::find_edition_marker_pda(
+    &ctx.accounts.master_edition.key(), // Pass reference to master edition key
+    edition_number
+);
     // Create the print edition instruction
     let print_edition_ix = PrintV2 {
         edition: ctx.accounts.edition.key(),
@@ -224,7 +249,7 @@ msg!("Creating metadata account");
         edition_token_account: ctx.accounts.edition_token_account.key(),
         edition_mint_authority: ctx.accounts.payer.key(),
         edition_token_record: None,
-        edition_marker_pda: ctx.accounts.edition.key(),
+        edition_marker_pda: edition_marker_pda,
         master_token_account_owner: (ctx.accounts.payer.key(), false),
         master_token_account: ctx.accounts.master_token_account.key(),
         master_edition: ctx.accounts.master_edition.key(),
@@ -251,7 +276,6 @@ msg!("Creating metadata account");
             ctx.accounts.master_edition.to_account_info(),
             ctx.accounts.master_metadata.to_account_info(),
             ctx.accounts.payer.to_account_info(),
-            ctx.accounts.token_program.to_account_info(),
             ctx.accounts.edition_token_account.to_account_info(),
             ctx.accounts.master_token_account.to_account_info(),
             ctx.accounts.token_program.to_account_info(),
