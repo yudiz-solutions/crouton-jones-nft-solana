@@ -251,9 +251,11 @@ msg!("Creating metadata account");
             ctx.accounts.master_edition.to_account_info(),
             ctx.accounts.master_metadata.to_account_info(),
             ctx.accounts.payer.to_account_info(),
-            ctx.accounts.rent.to_account_info(),
-            ctx.accounts.system_program.to_account_info(),
             ctx.accounts.token_program.to_account_info(),
+            ctx.accounts.edition_token_account.to_account_info(),
+            ctx.accounts.master_token_account.to_account_info(),
+            ctx.accounts.token_program.to_account_info(),
+            ctx.accounts.system_program.to_account_info(),
             ctx.accounts.associated_token_program.to_account_info(),
         ],
     )?;
